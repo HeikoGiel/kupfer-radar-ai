@@ -15,13 +15,13 @@ st.markdown("**KI-Modell:** Robustes XGBoost | **Daten:** Makroökonomie, Marktp
 @st.cache_data(ttl=3600)
 def load_and_train_quant_model():
     # Alle 7 globalen Datenströme ziehen
-    copper = yf.download("HG=F", period="5y")['Close'].squeeze()
-    sp500 = yf.download("^GSPC", period="5y")['Close'].squeeze()
-    oil = yf.download("CL=F", period="5y")['Close'].squeeze()
-    dxy = yf.download("DX-Y.NYB", period="5y")['Close'].squeeze()
-    cny = yf.download("CNY=X", period="5y")['Close'].squeeze()
-    copx = yf.download("COPX", period="5y")['Close'].squeeze() # Minen-Aktien
-    tnx = yf.download("^TNX", period="5y")['Close'].squeeze()  # Zinsen
+   copper = yf.Ticker("HG=F").history(period="5y")['Close']
+    sp500 = yf.Ticker("^GSPC").history(period="5y")['Close']
+    oil = yf.Ticker("CL=F").history(period="5y")['Close']
+    dxy = yf.Ticker("DX-Y.NYB").history(period="5y")['Close']
+    cny = yf.Ticker("CNY=X").history(period="5y")['Close']
+    copx = yf.Ticker("COPX").history(period="5y")['Close']
+    tnx = yf.Ticker("^TNX").history(period="5y")['Close']
 
     df = pd.DataFrame({
         'Preis': copper, 'SP500': sp500, 'Oel': oil, 
