@@ -15,7 +15,7 @@ st.markdown("**KI-Modell:** Robustes XGBoost | **Daten:** Makroökonomie, Marktp
 @st.cache_data(ttl=3600)
 def load_and_train_quant_model():
     # Alle 7 globalen Datenströme ziehen
-   copper = yf.Ticker("HG=F").history(period="5y")['Close']
+    copper = yf.Ticker("HG=F").history(period="5y")['Close']
     sp500 = yf.Ticker("^GSPC").history(period="5y")['Close']
     oil = yf.Ticker("CL=F").history(period="5y")['Close']
     dxy = yf.Ticker("DX-Y.NYB").history(period="5y")['Close']
