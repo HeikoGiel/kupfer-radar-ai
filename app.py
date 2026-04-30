@@ -5,6 +5,7 @@ import xgboost as xgb
 import pandas_ta_classic as ta
 import plotly.graph_objects as go
 from datetime import timedelta
+import psycopg2
 
 # --- 1. UI SETUP ---
 st.set_page_config(page_title="AI Procurement Radar | Quant Edition", layout="wide")
@@ -15,13 +16,32 @@ st.markdown("**KI-Modell:** Robustes XGBoost | **Daten:** Makroökonomie, Marktp
 @st.cache_data(ttl=3600)
 def load_and_train_quant_model():
     # Alle 7 globalen Datenströme ziehen
-    copper = yf.Ticker("HG=F").history(period="5y")['Close']
-    sp500 = yf.Ticker("^GSPC").history(period="5y")['Close']
-    oil = yf.Ticker("CL=F").history(period="5y")['Close']
-    dxy = yf.Ticker("DX-Y.NYB").history(period="5y")['Close']
-    cny = yf.Ticker("CNY=X").history(period="5y")['Close']
-    copx = yf.Ticker("COPX").history(period="5y")['Close']
-    tnx = yf.Ticker("^TNX").history(period="5y")['Close']
+    # --- START DATEN LADEN (AUS DER CLOUD DATENBANK) ---
+@st.cache_data(ttl=3600) 
+def lade_daten_aus_supabase():
+    conn = psycopg2.connect(st.secrets["DB_URI"])
+    query = "SELECT * FROM kupfer_historie ORDER BY datum ASC;"
+    df = pd.read_sql_query(query, conn, index_col="datum", parse_dates=["datum"])
+    conn.close()
+    return df
+
+try:
+    historie_df = lade_daten_aus_supabase()
+    
+    copper = historie_df['kupfer_preis']
+    sp500 = historie_df['sp500']
+    oil = historie_df['oel']
+    dxy = historie_df['dxy']
+    cny = historie_df['cny']
+    copx = historie_df['copx']
+    tnx = historie_df['tnx']
+    
+    st.sidebar.success("🟢 Verbunden mit Supabase Cloud-DB")
+
+except Exception as e:
+    st.sidebar.error(f"❌ Datenbank-Fehler: {e}")
+    st.stop() 
+# --- ENDE DATEN LADEN ---
 
     df = pd.DataFrame({
         'Preis': copper, 'SP500': sp500, 'Oel': oil, 
