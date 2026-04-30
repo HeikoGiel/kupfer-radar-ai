@@ -5,3 +5,4 @@ xgboost
 pandas-ta-classic
 plotly
 scikit-learn
+psycopg2-binary
