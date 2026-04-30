@@ -2,7 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import xgboost as xgb
-import pandas_ta as ta
+import pandas_ta_classic as ta
 import plotly.graph_objects as go
 from datetime import timedelta
 
