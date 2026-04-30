@@ -7,7 +7,6 @@ from datetime import timedelta
 import psycopg2
 
 # --- 1. SPRACH-EINSTELLUNGEN ---
-# Hier definieren wir alle Texte für die App
 languages = {
     "Deutsch": {
         "title": "🏛️ Professional AI Procurement Radar (Quant Edition)",
@@ -22,7 +21,8 @@ languages = {
         "status_stable": "⚖️ MARKT STABIL",
         "chart_title": "90-Tage Historie & KI-Vorhersage",
         "chart_real": "Realer Preis",
-        "chart_pred": "Quant-Prognose"
+        "chart_pred": "Quant-Prognose",
+        "axis_date": "Datum"
     },
     "English": {
         "title": "🏛️ Professional AI Procurement Radar (Quant Edition)",
@@ -37,16 +37,15 @@ languages = {
         "status_stable": "⚖️ MARKET STABLE",
         "chart_title": "90-Day History & AI Prediction",
         "chart_real": "Real Price",
-        "chart_pred": "Quant Forecast"
+        "chart_pred": "Quant Forecast",
+        "axis_date": "Date"
     }
 }
 
 # --- 2. UI SETUP & SPRACHWAHL ---
 st.set_page_config(page_title="AI Procurement Radar", layout="wide")
-
-# Sprachauswahl in der Sidebar ganz oben
 selected_lang = st.sidebar.selectbox("Language / Sprache", ["Deutsch", "English"])
-t = languages[selected_lang] # 't' ist jetzt unser Kurz-Weg für 'translations'
+t = languages[selected_lang]
 
 st.title(t["title"])
 st.markdown(t["subtitle"])
@@ -60,6 +59,7 @@ def lade_daten_aus_supabase():
     conn.close()
     return df
 
+# --- 4. MODELL TRAINING ---
 @st.cache_data(ttl=3600)
 def load_and_train_quant_model():
     historie_df = lade_daten_aus_supabase()
@@ -76,8 +76,11 @@ def load_and_train_quant_model():
     df['SMA_14'] = df['Preis'].rolling(window=14).mean()
     
     # Trends
-    for col in ['SP500', 'Oel', 'DXY', 'Minen_Aktien', 'Zinsen']:
-        df[f'{col}_Trend'] = df[col] - df[col].shift(7)
+    df['SP500_Trend'] = df['SP500'] - df['SP500'].shift(7)
+    df['Oel_Trend'] = df['Oel'] - df['Oel'].shift(7)
+    df['DXY_Trend'] = df['DXY'] - df['DXY'].shift(7)
+    df['Minen_Trend'] = df['Minen_Aktien'] - df['Minen_Aktien'].shift(7)
+    df['Zins_Trend'] = df['Zinsen'] - df['Zinsen'].shift(7)
     
     df.ta.rsi(close='Preis', length=14, append=True)
     df.ta.macd(close='Preis', append=True)
@@ -92,8 +95,14 @@ def load_and_train_quant_model():
     aktueller_preis = df['Preis'].iloc[-1]
     
     train_df = df.dropna()
-    model = xgb.XGBRegressor(n_estimators=50, learning_rate=0.01, max_depth=5, random_state=42)
-    model.fit(train_df[features], train_df['Target_Delta'])
+    X = train_df[features]
+    y = train_df['Target_Delta']
+    
+    model = xgb.XGBRegressor(
+        n_estimators=50, learning_rate=0.01, max_depth=5, 
+        subsample=0.8, colsample_bytree=0.8, random_state=42
+    )
+    model.fit(X, y)
     
     predicted_delta = model.predict(heute_features)[0]
     return aktueller_preis, aktueller_preis + predicted_delta, predicted_delta, df
@@ -102,12 +111,11 @@ try:
     with st.spinner(t["spinner"]):
         aktueller_preis, vorhersage_preis, delta, df = load_and_train_quant_model()
     st.sidebar.success(t["sidebar_status"])
-
 except Exception as e:
     st.sidebar.error(f"{t['sidebar_error']}: {e}")
     st.stop() 
 
-# --- 4. UI DASHBOARD ---
+# --- 5. UI DASHBOARD ---
 st.write("---")
 col1, col2, col3 = st.columns(3)
 prozent = (delta / aktueller_preis) * 100
@@ -124,12 +132,12 @@ with col3:
     else:
         st.info(t["status_stable"])
 
-# --- 5. CHART ---
+# --- 6. CHART ---
 st.write("---")
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=df.index[-90:], y=df['Preis'].iloc[-90:], name=t["chart_real"], line=dict(color='royalblue')))
 fig.add_trace(go.Scatter(x=[df.index[-1], df.index[-1] + timedelta(days=7)], 
                          y=[aktueller_preis, vorhersage_preis], 
                          name=t["chart_pred"], line=dict(color='red', width=3, dash='dash')))
-fig.update_layout(height=500, title=t["chart_title"], xaxis_title="Date", yaxis_title="Price (USD)")
+fig.update_layout(height=500, title=t["chart_title"], xaxis_title=t["axis_date"], yaxis_title="Price (USD)")
 st.plotly_chart(fig, use_container_width=True)
