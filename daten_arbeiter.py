@@ -86,8 +86,8 @@ except Exception as e:
     print(f"❌ Es gab einen Fehler: {e}")
 
 finally:
-    # NEU: Stellt sicher, dass conn überhaupt existiert, bevor er versucht, es zu schließen
-    if 'conn' in locals() and conn:
+    if 'cursor' in locals() and cursor:
         cursor.close()
+    if 'conn' in locals() and conn:
         conn.close()
         print("Datenbank-Verbindung sicher geschlossen.")
