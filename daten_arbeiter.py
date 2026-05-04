@@ -3,6 +3,7 @@ import pandas as pd
 import psycopg2
 from datetime import datetime
 import os # NEU: Wird für die versteckten Passwörter gebraucht
+import psycopg2.extras
 
 # --- 1. VERBINDUNG ZUR DATENBANK AUFBAUEN ---
 # NEU: Das Passwort wird jetzt sicher aus den GitHub Secrets geladen!
@@ -59,13 +60,11 @@ try:
     df = df.ffill().dropna()
 
     # --- 4. NEUE DATEN IN DIE DATENBANK SCHIEBEN ---
-    print(f"Schreibe {len(df)} neue Zeilen in die Datenbank...")
+    print(f"Schreibe {len(df)} neue Zeilen in die Datenbank (Bulk Insert)...")
     
+    # Wir verpacken alle Zeilen in eine einzige große Liste
+    daten_liste = []
     for index, row in df.iterrows():
-        insert_query = """
-            INSERT INTO kupfer_historie (datum, kupfer_preis, sp500, oel, dxy, cny, copx, tnx)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """
         datum_str = index.strftime('%Y-%m-%d')
         werte = (
             datum_str, 
@@ -77,11 +76,20 @@ try:
             float(row['copx']), 
             float(row['tnx'])
         )
-        cursor.execute(insert_query, werte)
+        daten_liste.append(werte)
+
+    # Der SQL-Befehl erwartet jetzt ein riesiges Paket
+    insert_query = """
+        INSERT INTO kupfer_historie (datum, kupfer_preis, sp500, oel, dxy, cny, copx, tnx)
+        VALUES %s
+    """
+    
+    # Der magische Turbo-Befehl, der alles auf einmal schickt
+    psycopg2.extras.execute_values(cursor, insert_query, daten_liste)
 
     conn.commit()
     print("✅ Alle neuen Daten erfolgreich in Supabase gespeichert!")
-
+    
 except Exception as e:
     print(f"❌ Es gab einen Fehler: {e}")
 
