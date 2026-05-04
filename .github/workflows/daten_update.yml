@@ -3,7 +3,7 @@ name: Kupfer-Daten stündlich aktualisieren
 # Wann soll das Skript laufen?
 on:
   schedule:
-    - cron: '0 * * * *' # Zu jeder vollen Stunde (08:00, 09:00, etc.)
+    - cron: '0 2 * * *' # Läuft jeden Tag um 02:00 Uhr nachts (UTC)
   workflow_dispatch: # Erlaubt es dir, das Skript auch manuell per Button zu starten
 
 jobs:
