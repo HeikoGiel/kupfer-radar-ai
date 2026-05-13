@@ -1,143 +1,102 @@
 import streamlit as st
 import pandas as pd
-import xgboost as xgb
-import pandas_ta_classic as ta
-import plotly.graph_objects as go
-from datetime import timedelta
 import psycopg2
+import plotly.graph_objects as go
 
-# --- 1. SPRACH-EINSTELLUNGEN ---
-languages = {
-    "Deutsch": {
-        "title": "🏛️ Professional AI Procurement Radar (Quant Edition)",
-        "subtitle": "**KI-Modell:** Robustes XGBoost | **Daten:** Makroökonomie, Marktpsychologie & Alternative Data",
-        "sidebar_status": "🟢 Verbunden mit Supabase Cloud-DB",
-        "sidebar_error": "❌ Datenbank-Fehler",
-        "spinner": "Lade Daten & berechne KI-Prognose...",
-        "metric_live": "Live Kupferpreis",
-        "metric_pred": "KI-Prognose (7 Tage)",
-        "status_buy": "🚨 KAUF-ALARM (Makro-gestützt)",
-        "status_wait": "💎 WARTEN (Preisverfall erwartet)",
-        "status_stable": "⚖️ MARKT STABIL",
-        "chart_title": "90-Tage Historie & KI-Vorhersage",
-        "chart_real": "Realer Preis",
-        "chart_pred": "Quant-Prognose",
-        "axis_date": "Datum"
-    },
-    "English": {
-        "title": "🏛️ Professional AI Procurement Radar (Quant Edition)",
-        "subtitle": "**AI Model:** Robust XGBoost | **Data:** Macroeconomics, Market Sentiment & Alternative Data",
-        "sidebar_status": "🟢 Connected to Supabase Cloud-DB",
-        "sidebar_error": "❌ Database Error",
-        "spinner": "Loading data & calculating AI forecast...",
-        "metric_live": "Live Copper Price",
-        "metric_pred": "AI Forecast (7 Days)",
-        "status_buy": "🚨 BUY ALARM (Macro-supported)",
-        "status_wait": "💎 WAIT (Price drop expected)",
-        "status_stable": "⚖️ MARKET STABLE",
-        "chart_title": "90-Day History & AI Prediction",
-        "chart_real": "Real Price",
-        "chart_pred": "Quant Forecast",
-        "axis_date": "Date"
-    }
-}
+# --- SETUP ---
+st.set_page_config(page_title="Kupfer Radar AI", layout="wide")
+st.title("📈 Kupfer Radar AI - Dashboard")
 
-# --- 2. UI SETUP & SPRACHWAHL ---
-st.set_page_config(page_title="AI Procurement Radar", layout="wide")
-selected_lang = st.sidebar.selectbox("Language / Sprache", ["Deutsch", "English"])
-t = languages[selected_lang]
-
-st.title(t["title"])
-st.markdown(t["subtitle"])
-
-# --- 3. DATEN LADEFUNKTION ---
-@st.cache_data(ttl=3600) 
-def lade_daten_aus_supabase():
-    conn = psycopg2.connect(st.secrets["DB_URI"])
-    query = "SELECT * FROM kupfer_historie ORDER BY datum ASC;"
-    df = pd.read_sql_query(query, conn, index_col="datum", parse_dates=["datum"])
-    conn.close()
-    return df
-
-# --- 4. MODELL TRAINING ---
-@st.cache_data(ttl=3600)
-def load_and_train_quant_model():
-    historie_df = lade_daten_aus_supabase()
-    
-    df = pd.DataFrame({
-        'Preis': historie_df['kupfer_preis'], 'SP500': historie_df['sp500'], 'Oel': historie_df['oel'], 
-        'DXY': historie_df['dxy'], 'CNY': historie_df['cny'], 
-        'Minen_Aktien': historie_df['copx'], 'Zinsen': historie_df['tnx']
-    }).ffill()
-    
-    df['Preis_in_7_Tagen'] = df['Preis'].shift(-7)
-    df['Target_Delta'] = df['Preis_in_7_Tagen'] - df['Preis']
-    df['Preis_Gestern'] = df['Preis'].shift(1)
-    df['SMA_14'] = df['Preis'].rolling(window=14).mean()
-    
-    # Trends
-    df['SP500_Trend'] = df['SP500'] - df['SP500'].shift(7)
-    df['Oel_Trend'] = df['Oel'] - df['Oel'].shift(7)
-    df['DXY_Trend'] = df['DXY'] - df['DXY'].shift(7)
-    df['Minen_Trend'] = df['Minen_Aktien'] - df['Minen_Aktien'].shift(7)
-    df['Zins_Trend'] = df['Zinsen'] - df['Zinsen'].shift(7)
-    
-    df.ta.rsi(close='Preis', length=14, append=True)
-    df.ta.macd(close='Preis', append=True)
-    
-    features = [
-        'Preis', 'Preis_Gestern', 'SMA_14', 'SP500', 'Oel', 'SP500_Trend', 'Oel_Trend',
-        'DXY', 'CNY', 'DXY_Trend', 'RSI_14', 'MACD_12_26_9',
-        'Minen_Aktien', 'Zinsen', 'Minen_Trend', 'Zins_Trend'
-    ]
-    
-    heute_features = df[features].iloc[-1:]
-    aktueller_preis = df['Preis'].iloc[-1]
-    
-    train_df = df.dropna()
-    X = train_df[features]
-    y = train_df['Target_Delta']
-    
-    model = xgb.XGBRegressor(
-        n_estimators=50, learning_rate=0.01, max_depth=5, 
-        subsample=0.8, colsample_bytree=0.8, random_state=42
-    )
-    model.fit(X, y)
-    
-    predicted_delta = model.predict(heute_features)[0]
-    return aktueller_preis, aktueller_preis + predicted_delta, predicted_delta, df
+# --- DATENBANK VERBINDUNG ---
+# Streamlit nutzt "st.secrets" statt "os.environ" für Passwörter
+@st.cache_resource
+def init_connection():
+    return psycopg2.connect(st.secrets["DB_URI"])
 
 try:
-    with st.spinner(t["spinner"]):
-        aktueller_preis, vorhersage_preis, delta, df = load_and_train_quant_model()
-    st.sidebar.success(t["sidebar_status"])
+    conn = init_connection()
 except Exception as e:
-    st.sidebar.error(f"{t['sidebar_error']}: {e}")
-    st.stop() 
+    st.error("❌ Datenbankverbindung fehlgeschlagen. Sind die Secrets in Streamlit hinterlegt?")
+    st.stop()
 
-# --- 5. UI DASHBOARD ---
-st.write("---")
-col1, col2, col3 = st.columns(3)
-prozent = (delta / aktueller_preis) * 100
+# --- DATEN LADEN ---
+@st.cache_data(ttl=3600) # Speichert die Daten für 1 Stunde im Zwischenspeicher (macht die App pfeilschnell)
+def load_data():
+    # Wir holen beide Tabellen
+    df_hist = pd.read_sql("SELECT * FROM kupfer_historie ORDER BY datum ASC;", conn)
+    df_track = pd.read_sql("SELECT * FROM modell_tracking ORDER BY datum ASC;", conn)
+    return df_hist, df_track
 
-with col1:
-    st.metric(t["metric_live"], f"${aktueller_preis:.4f}")
-with col2:
-    st.metric(t["metric_pred"], f"${vorhersage_preis:.4f}", f"{prozent:.2f}%")
-with col3:
-    if prozent > 0.5:
-        st.error(t["status_buy"])
-    elif prozent < -0.5:
-        st.success(t["status_wait"])
+df_hist, df_track = load_data()
+
+# --- LAYOUT & METRIKEN ---
+st.subheader("Aktuelle KI-Vorhersage (1 Woche)")
+
+if not df_hist.empty and not df_track.empty:
+    # Neuesten echten Preis holen
+    letzter_echter_preis = df_hist.iloc[-1]['kupfer_preis']
+    letztes_datum = df_hist.iloc[-1]['datum']
+
+    # Die aktuellste Vorhersage aus der Tracking-Tabelle holen
+    zukuenftige_vorhersagen = df_track[df_track['vorhersage'].notna()]
+    
+    if not zukuenftige_vorhersagen.empty:
+        neueste_vorhersage_row = zukuenftige_vorhersagen.iloc[-1]
+        vorhersage_wert = neueste_vorhersage_row['vorhersage']
+        vorhersage_datum = neueste_vorhersage_row['datum']
+        
+        # Rendite berechnen
+        differenz = vorhersage_wert - letzter_echter_preis
+        prozent = (differenz / letzter_echter_preis) * 100
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric(f"Letzter Preis ({letztes_datum})", f"{letzter_echter_preis:.4f} USD")
+        col2.metric(f"Prognose für {vorhersage_datum}", f"{vorhersage_wert:.4f} USD", f"{prozent:.2f} %")
     else:
-        st.info(t["status_stable"])
+        st.warning("Noch keine Vorhersagen in der Datenbank gefunden.")
 
-# --- 6. CHART ---
-st.write("---")
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df.index[-90:], y=df['Preis'].iloc[-90:], name=t["chart_real"], line=dict(color='royalblue')))
-fig.add_trace(go.Scatter(x=[df.index[-1], df.index[-1] + timedelta(days=7)], 
-                         y=[aktueller_preis, vorhersage_preis], 
-                         name=t["chart_pred"], line=dict(color='red', width=3, dash='dash')))
-fig.update_layout(height=500, title=t["chart_title"], xaxis_title=t["axis_date"], yaxis_title="Price (USD)")
-st.plotly_chart(fig, use_container_width=True)
+# --- CHART 1: MODELL-TÜV (Vorhersage vs. Realität) ---
+st.markdown("---")
+st.subheader("🔍 Modell-TÜV: Vorhersage vs. Echter Preis")
+st.markdown("Hier siehst du, wie gut das Modell in der Vergangenheit lag. Die rote Linie zeigt, was das Modell **eine Woche im Voraus** für diesen Tag prophezeit hat.")
+
+fig_tuev = go.Figure()
+
+# Echter Preis
+fig_tuev.add_trace(go.Scatter(
+    x=df_track['datum'], y=df_track['tatsaechlich'], 
+    mode='lines', name='Echter Preis', line=dict(color='#1f77b4', width=2)
+))
+
+# Vorhersage
+fig_tuev.add_trace(go.Scatter(
+    x=df_track['datum'], y=df_track['vorhersage'], 
+    mode='lines', name='Vorhersage (1 Woche alt)', line=dict(color='#ff7f0e', width=2, dash='dash')
+))
+
+fig_tuev.update_layout(height=400, hovermode="x unified", margin=dict(l=0, r=0, t=30, b=0))
+st.plotly_chart(fig_tuev, use_container_width=True)
+
+# --- CHART 2: HISTORIE & TRENDS ---
+st.markdown("---")
+st.subheader("📊 Kupfer-Historie & Technische Trends")
+
+fig_hist = go.Figure()
+
+# Kupferpreis
+fig_hist.add_trace(go.Scatter(
+    x=df_hist['datum'], y=df_hist['kupfer_preis'], 
+    mode='lines', name='Kupferpreis', line=dict(color='white')
+))
+# Gleitende Durchschnitte
+fig_hist.add_trace(go.Scatter(
+    x=df_hist['datum'], y=df_hist['sma_50'], 
+    mode='lines', name='SMA 50 (Kurzfristig)', line=dict(color='yellow', width=1)
+))
+fig_hist.add_trace(go.Scatter(
+    x=df_hist['datum'], y=df_hist['sma_200'], 
+    mode='lines', name='SMA 200 (Langfristig)', line=dict(color='purple', width=1)
+))
+
+fig_hist.update_layout(height=500, hovermode="x unified", margin=dict(l=0, r=0, t=30, b=0))
+st.plotly_chart(fig_hist, use_container_width=True)
