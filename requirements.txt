@@ -4,5 +4,5 @@ pandas
 plotly
 scikit-learn
 psycopg2-binary
-https://github.com/twopirllc/pandas-ta/archive/refs/heads/main.zip
+pandas-ta-classic
 xgboost==2.0.3
