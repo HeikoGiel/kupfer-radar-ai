@@ -1,8 +1,8 @@
 streamlit
 yfinance
 pandas
-xgboost
-pandas-ta-classic
 plotly
 scikit-learn
 psycopg2-binary
+pandas-ta==0.3.14b0
+xgboost==2.0.3
