@@ -16,7 +16,7 @@ def init_connection():
 try:
     conn = init_connection()
 except Exception as e:
-    st.error("❌ Datenbankverbindung fehlgeschlagen. Sind die Secrets in Streamlit hinterlegt?")
+    st.error(f"❌ Fehler-Details vom Server: {e}")
     st.stop()
 
 # --- DATEN LADEN ---
