@@ -1,7 +1,7 @@
 import os
 import yfinance as yf
 import pandas as pd
-import pandas_ta as ta # NEU: Unser Tool für RSI, Gleitende Durchschnitte etc.
+import pandas_ta_classic as ta # NEU: Unser Tool für RSI, Gleitende Durchschnitte etc.
 import psycopg2
 import psycopg2.extras
 from datetime import timedelta
