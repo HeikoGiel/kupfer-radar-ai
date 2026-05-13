@@ -1,11 +1,11 @@
 import os
 import yfinance as yf
 import pandas as pd
-import pandas_ta_classic as ta # NEU: Unser Tool für RSI, Gleitende Durchschnitte etc.
+import pandas_ta_classic as ta
 import psycopg2
 import psycopg2.extras
 from datetime import timedelta
-from xgboost import XGBRegressor # NEU: Die KI
+from xgboost import XGBRegressor
 
 # --- 1. VERBINDUNG ZUR DATENBANK ---
 DB_URI = os.environ.get("DB_URI")
@@ -31,7 +31,7 @@ try:
         daten.index = daten.index.tz_localize(None).normalize()
         return daten
 
-    # Basistabelle bauen
+    # Basistabelle bauen (Makro-Daten + NEU: Gold)
     df = pd.DataFrame({
         'kupfer_preis': copper_raw['Close'],
         'kupfer_high': copper_raw['High'],
@@ -41,9 +41,11 @@ try:
         'dxy': lade_sauber("DX-Y.NYB"),
         'cny': lade_sauber("CNY=X"),
         'copx': lade_sauber("COPX"),
-        'tnx': lade_sauber("^TNX")
+        'tnx': lade_sauber("^TNX"),
+        'gold': lade_sauber("GC=F") # NEU: Goldpreis als Indikator für Fluchtwährung
     })
     
+    # Forward Fill für Feiertage, die an unterschiedlichen Börsen stattfinden
     df = df.ffill().dropna()
 
     # KI schlau machen: Indikatoren hinzufügen
@@ -60,6 +62,8 @@ try:
     
     daten_liste = []
     for index, row in df.iterrows():
+        # Gold wird hier für die Datenbank weggelassen, damit du deine Supabase-Tabelle 
+        # nicht extra umbauen musst. Für das KI-Training bleibt es aber im Speicher!
         daten_liste.append((
             index.strftime('%Y-%m-%d'), 
             float(row['kupfer_preis']), float(row['sp500']), float(row['oel']), 
@@ -81,7 +85,9 @@ try:
     
     # Die letzten 5 Tage fliegen fürs Training raus, weil wir deren Zukunft noch nicht kennen
     df_train = df.dropna() 
-    features = ['kupfer_preis', 'sp500', 'oel', 'dxy', 'cny', 'copx', 'tnx', 'sma_50', 'sma_200', 'rsi_14', 'atr_14']
+    
+    # NEU: Gold ist jetzt Teil der Features!
+    features = ['kupfer_preis', 'sp500', 'oel', 'dxy', 'cny', 'copx', 'tnx', 'gold', 'sma_50', 'sma_200', 'rsi_14', 'atr_14']
     
     X = df_train[features]
     y = df_train['target']
